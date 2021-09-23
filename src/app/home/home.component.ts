@@ -26,18 +26,26 @@ export class HomeComponent {
 								// Utils.openUrl(order._links.payment.href);
 
 								// Payment through Network SDK
-								ngenius
-									.initiateCardPayment(order)
-									.pipe(
-										tap(status => {
-											console.log('initiateCardPayment', { status });
-										}),
-										catchError(err => {
-											console.log('initiateCardPayment.error', { err });
-											return of(err);
-										})
-									)
-									.subscribe();
+								try {
+									ngenius
+										.initiateApplePay(order, {
+											merchantIdentifier: 'merchant.iklix.fullstopsweex',
+											countryCode: 'AE',
+											amount: 2000
+										} as PKPaymentRequest & { amount: number })
+										.pipe(
+											tap(status => {
+												console.log('initiateApplePay', { status });
+											}),
+											catchError(err => {
+												console.log('initiateApplePay.error', { err });
+												return of(err);
+											})
+										)
+										.subscribe();
+								} catch (error) {
+									console.error({ error });
+								}
 							})
 						)
 						.subscribe();
