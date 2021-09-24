@@ -1,6 +1,6 @@
 import { ApplePayMerchantCapability } from '@nativescript/apple-pay/enums.ios';
 import { isAndroid, isIOS } from '@nativescript/core';
-import { Observable } from 'rxjs';
+import { Observable, Subscriber } from 'rxjs';
 
 export class NativescriptNgenius {
 	configureSDK(config: { shouldShowOrderAmount?: boolean; language?: string }) {
@@ -113,49 +113,77 @@ export class NativescriptNgenius {
 		const orderData = NSJSONSerialization.dataWithJSONObjectOptionsError(order, NSJSONWritingOptions.WithoutEscapingSlashes);
 		const orderResponse = OrderResponse.decodeFromDataError(orderData);
 
-		const applePayDelegate: ApplePayDelegate = {};
+		const applePayDelegate = new ApplePayDelegateImpl();
 
 		return new Observable(observer => {
-			const cardPaymentDelegate: CardPaymentDelegate = {
-				paymentDidCompleteWith: status => {
-					console.log('paymentDidCompleteWith', { status });
-					observer.next({ status });
-					observer.complete();
-					observer.unsubscribe();
-				},
-				authorizationDidBegin: () => {},
-				authorizationWillBegin: () => {},
-				paymentDidBegin: () => {},
-				threeDSChallengeDidBegin: () => {},
-				threeDSChallengeDidCompleteWith: () => {}
-			};
-			if (isIOS) {
-				if (!orderResponse) {
-					observer.error('Order not found');
+			const cardPaymentDelegate = CardPaymentDelegateImpl.initWithObserver(observer);
+			try {
+				if (isIOS) {
+					if (!orderResponse) {
+						throw Error('Order not found');
+					}
+					orderResponse;
+
+					if (!applePayConfig.merchantIdentifier) {
+						throw Error('Merchant identifier is not found');
+					}
+					if (!applePayConfig.countryCode) {
+						throw Error('Country code is not found');
+					}
+
+					const summaryItem: PKPaymentSummaryItem = PKPaymentSummaryItem.summaryItemWithLabelAmount(applePayConfig.merchantName || 'Total', NSDecimalNumber.alloc().initWithFloat(applePayConfig.amount || 0));
+
+					const summaryItems: NSArray<unknown> = NSArray.alloc()
+						.init()
+						.arrayByAddingObject(summaryItem);
+
+					const applePayRequest: PKPaymentRequest = PKPaymentRequest.alloc().init();
+					applePayRequest.merchantIdentifier = applePayConfig.merchantIdentifier;
+					applePayRequest.countryCode = applePayConfig.countryCode;
+					applePayRequest.currencyCode = applePayConfig.currencyCode;
+					applePayRequest.requiredShippingContactFields = NSSet.alloc().initWithArray([PKContactFieldPostalAddress, PKContactFieldEmailAddress, PKContactFieldPhoneNumber]) as NSSet<string>;
+					applePayRequest.merchantCapabilities = ApplePayMerchantCapability.Debit | ApplePayMerchantCapability.Credit | ApplePayMerchantCapability.ThreeDS;
+					applePayRequest.requiredBillingContactFields = NSSet.alloc().initWithArray([PKContactFieldPostalAddress, PKContactFieldName]) as NSSet<string>;
+
+					applePayRequest.paymentSummaryItems = summaryItems as NSArray<PKPaymentSummaryItem>;
+
+					NISdk.sharedInstance.initiateApplePayWithApplePayDelegateCardPaymentDelegateOverParentForWith(applePayDelegate, cardPaymentDelegate, viewController, orderResponse, applePayRequest);
+				} else {
+					throw Error('Apple pay is not supported in this platform');
 				}
-				orderResponse;
-
-				if (!applePayConfig.merchantIdentifier) {
-					observer.error('Merchant identifier is not found');
-				}
-				if (!applePayConfig.countryCode) {
-					observer.error('Country code is not found');
-				}
-
-				const summaryItem: PKPaymentSummaryItem = PKPaymentSummaryItem.summaryItemWithLabelAmount(applePayConfig.merchantName || 'Total', NSDecimalNumber.alloc().initWithFloat(applePayConfig.amount || 0));
-
-				const summaryItems: NSArray<unknown> = NSArray.new().arrayByAddingObject(summaryItem);
-
-				const applePayRequest: PKPaymentRequest = PKPaymentRequest.alloc();
-				applePayRequest.merchantIdentifier = applePayConfig.merchantIdentifier;
-				applePayRequest.countryCode = applePayConfig.countryCode;
-				(applePayRequest.currencyCode = applePayConfig.currencyCode), (applePayRequest.merchantCapabilities = ApplePayMerchantCapability.Debit | ApplePayMerchantCapability.Credit | ApplePayMerchantCapability.ThreeDS);
-				applePayRequest.paymentSummaryItems = summaryItems as NSArray<PKPaymentSummaryItem>;
-
-				NISdk.sharedInstance.initiateApplePayWithApplePayDelegateCardPaymentDelegateOverParentForWith(applePayDelegate, cardPaymentDelegate, viewController, orderResponse, applePayRequest);
-			} else {
-				observer.error('Apple pay is not supported in this platform');
+			} catch (error) {
+				observer.error(error);
+				observer.unsubscribe();
 			}
 		});
 	}
+}
+
+@NativeClass
+class ApplePayDelegateImpl implements ApplePayDelegate {
+	public static ObjCProtocols = [ApplePayDelegate];
+}
+
+@NativeClass
+class CardPaymentDelegateImpl extends NSObject implements CardPaymentDelegate {
+	public static ObjCProtocols = [CardPaymentDelegate];
+	public static initWithObserver(observer: Subscriber<unknown>): CardPaymentDelegateImpl {
+		const handler = <CardPaymentDelegateImpl>CardPaymentDelegateImpl.new();
+		handler._observer = observer;
+
+		return handler;
+	}
+	private _observer!: Subscriber<unknown>;
+
+	public paymentDidCompleteWith(status: PaymentStatus) {
+		this._observer.next({ status });
+		this._observer.complete();
+		this._observer.unsubscribe();
+	}
+
+	public authorizationDidBegin() {}
+	public authorizationWillBegin() {}
+	public paymentDidBegin() {}
+	public threeDSChallengeDidBegin() {}
+	public threeDSChallengeDidCompleteWith() {}
 }
