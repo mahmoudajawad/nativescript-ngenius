@@ -21,9 +21,16 @@ export class HomeComponent {
 						.createOrder(access_token, 2000)
 						.pipe(
 							tap((order: any) => {
-								console.log('order payment link:', order._links.payment.href);
-								// uncomment to pay through web browser:
-								// Utils.openUrl(order._links.payment.href);
+								// Payment authorisation. Is this even required?
+								// console.log('payment:apple_pay', order._embedded.payment[0]._links['payment:apple_pay']);
+								// this.apis
+								// 	.createPaymentToken(order)
+								// 	.pipe(
+								// 		tap(paymentToken => {
+								// 			console.log('order payment token', paymentToken);
+								// 		})
+								// 	)
+								// 	.subscribe();
 
 								// Payment through Network SDK
 								try {
@@ -31,6 +38,7 @@ export class HomeComponent {
 										.initiateApplePay(order, {
 											merchantIdentifier: 'merchant.iklix.fullstopsweex',
 											countryCode: 'AE',
+											currencyCode: 'AED',
 											amount: 2000
 										} as PKPaymentRequest & { amount: number })
 										.pipe(
