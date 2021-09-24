@@ -26,10 +26,16 @@ export class NativescriptNgeniusService {
 		return this.httpClient.post(
 			GATEWAY_API_URL,
 			{
-				action: 'SALE',
+				action: 'AUTH',
 				amount: {
 					currencyCode: 'AED',
 					value: amount
+				},
+				// Information on docs are conflicting. Is this required or not?
+				emailAddress: 'customer@email.com',
+				billingAddress: {
+					firstName: 'First',
+					lastName: 'Last'
 				}
 			},
 			{
@@ -40,5 +46,15 @@ export class NativescriptNgeniusService {
 				}
 			}
 		);
+	}
+
+	createPaymentToken(order: { _links: { payment: { href: string }; 'payment-authorization': { href: string } } }): Observable<unknown> {
+		return this.httpClient.post(order._links['payment-authorization'].href + '?code=' + order._links.payment.href.split('?code=')[1], null, {
+			headers: {
+				Accept: 'application/vnd.ni-payment.v2+json',
+				'Media-Type': 'application/x-www-form-urlencoded',
+				'Content-Type': 'application/x-www-form-urlencoded'
+			}
+		});
 	}
 }
